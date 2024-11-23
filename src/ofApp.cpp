@@ -34,12 +34,13 @@ void ofApp::draw() {
 		<< " \"" << midiOut.getName() << "\"" << endl
 		<< "is virtual?: " << midiOut.isVirtual() << endl << endl
 		<< "Sending to channel " << channel << endl << endl
-		<< "MOUSEPRESS" << endl
+		<< "MOUSEPRESS Test" << endl
 		<< "note: " << note << endl
 		<< "velocity: " << velocity << endl
 		<< "\n\nMIDI OUT CLOCK: " << (clockThread.isClockRunning() ? "on" : "off") << endl  
 		<< "Space key: Start/Stop" << endl
 		<< "Tempo +/-: " << clockThread.getBpm() << endl
+		<< "Reset backspace: " << clockThread.getBpm() << endl
 		<< "BPM: " << clockThread.getBpm();
 	ofDrawBitmapString(text.str(), 20, 20);
 
@@ -59,6 +60,10 @@ void ofApp::keyPressed(int key) {
 
 	case '-': // Decrease tempo
 		clockThread.setBpm(clockThread.getBpm() - 1.0f);
+		break;
+
+	case OF_KEY_BACKSPACE: // Reset
+		clockThread.setBpm(120.0f);
 		break;
 	}
 }
