@@ -40,7 +40,7 @@ void ofApp::draw() {
 		<< "\n\nMIDI OUT CLOCK: " << (clockThread.isClockRunning() ? "on" : "off") << endl  
 		<< "Space key: Start/Stop" << endl
 		<< "Tempo +/-: " << clockThread.getBpm() << endl
-		<< "Reset backspace: " << clockThread.getBpm() << endl
+		<< "Reset backspace" << endl
 		<< "BPM: " << clockThread.getBpm();
 	ofDrawBitmapString(text.str(), 20, 20);
 
