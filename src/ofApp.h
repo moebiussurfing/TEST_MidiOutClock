@@ -165,10 +165,11 @@ private:
 	MidiClockThread clockThread;
 };
 
+//--
+
 /*
 
 Test with a MIDI monitor (like MIDI Monitor on macOS or Protokol) to verify the messages:
-
 
 You should see F8 messages being sent regularly (24 per quarter note)
 When starting: F2 00 00 followed by FA

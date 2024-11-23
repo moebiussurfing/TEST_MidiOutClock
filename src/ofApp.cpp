@@ -82,6 +82,6 @@ void ofApp::mousePressed(int x, int y, int button) {
 }
 
 void ofApp::mouseDragged(int x, int y, int button) {
-	int v = ofMap(x, 0, ofGetHeight(), 240, 60);
+	float v = ofMap(x, 0, ofGetHeight(), 240, 60);
 	clockThread.setBpm(v);
 }
