@@ -5,7 +5,16 @@
 
 class MidiClockThread : public ofThread {
 public:
-	MidiClockThread() : bpm(120.0f), isPlaying(false), midiOut(nullptr), songPositionBeats(0) {}
+	// Initialize all variables in constructor
+	MidiClockThread() :
+		bpm(120.0f),
+		isPlaying(false),
+		midiOut(nullptr),
+		songPositionBeats(0),
+		pulsesPerQuarterNote(24),  // MIDI standard - initialize here
+		microsPerPulse(0)
+	{
+	}
 
 	void setup(ofxMidiOut* output) {
 		midiOut = output;
@@ -34,13 +43,15 @@ public:
 		std::lock_guard<std::mutex> lock(mutex);
 
 		// Ensure precise BPM value
-		bpm = std::round(newBpm * 10.0f) / 10.0f;  // Round to 0.1 precision
+		bpm = std::round(newBpm * 10.0f) / 10.0f;
 		bpm = std::clamp(bpm, 20.0f, 300.0f);
 
-		// High precision timing calculation
-		const double microsecondsPerMinute = 60.0 * 1000000.0;
-		const double pulsesPerMinute = bpm * pulsesPerQuarterNote;
-		microsPerPulse = static_cast<uint64_t>(std::round(microsecondsPerMinute / pulsesPerMinute));
+		// MIDI standard - constant value
+		const uint32_t PPQ = 24;
+		pulsesPerQuarterNote = PPQ;
+
+		// Calculate microseconds per pulse
+		microsPerPulse = static_cast<uint64_t>((60.0 * 1000000.0) / (bpm * pulsesPerQuarterNote));
 
 		ofLogNotice() << "Clock settings - BPM: " << bpm
 			<< " PPQ: " << pulsesPerQuarterNote
@@ -91,9 +102,15 @@ protected:
 		using clock = std::chrono::steady_clock;
 		using namespace std::chrono;
 
+		// Safety check
+		if (pulsesPerQuarterNote == 0 || microsPerPulse == 0) {
+			ofLogError() << "Invalid timing values!";
+			return;
+		}
+
 		// Pre-calculate intervals
 		const auto pulseInterval = microseconds(microsPerPulse);
-		const auto minSleepTime = microseconds(50);  // Minimum sleep to prevent CPU overload
+		const auto minSleepTime = microseconds(50);
 
 		// Initialize timing
 		auto nextPulseTime = clock::now();
