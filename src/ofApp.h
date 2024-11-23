@@ -32,14 +32,19 @@ public:
 
 	void setBpm(float newBpm) {
 		std::lock_guard<std::mutex> lock(mutex);
-		bpm = std::clamp(newBpm, 20.0f, 300.0f);
-		pulsesPerQuarterNote = 24; // MIDI standard
-		microsPerPulse = static_cast<uint64_t>((60.0 * 1000000.0) / (bpm * pulsesPerQuarterNote));
 
-		// Log timing details
-		ofLogNotice() << "Clock settings:"
-			<< " BPM: " << bpm
-			<< " Micros per pulse: " << microsPerPulse;
+		// Ensure precise BPM value
+		bpm = std::round(newBpm * 10.0f) / 10.0f;  // Round to 0.1 precision
+		bpm = std::clamp(bpm, 20.0f, 300.0f);
+
+		// High precision timing calculation
+		const double microsecondsPerMinute = 60.0 * 1000000.0;
+		const double pulsesPerMinute = bpm * pulsesPerQuarterNote;
+		microsPerPulse = static_cast<uint64_t>(std::round(microsecondsPerMinute / pulsesPerMinute));
+
+		ofLogNotice() << "Clock settings - BPM: " << bpm
+			<< " PPQ: " << pulsesPerQuarterNote
+			<< " us/pulse: " << microsPerPulse;
 	}
 
 	void play() {
@@ -86,8 +91,19 @@ protected:
 		using clock = std::chrono::steady_clock;
 		using namespace std::chrono;
 
+		// Pre-calculate intervals
+		const auto pulseInterval = microseconds(microsPerPulse);
+		const auto minSleepTime = microseconds(50);  // Minimum sleep to prevent CPU overload
+
+		// Initialize timing
 		auto nextPulseTime = clock::now();
 		uint64_t pulseCount = 0;
+
+		// Warm up the timer
+		for (int i = 0; i < 24; i++) {  // Send one beat worth of pulses quickly
+			midiOut->sendMidiByte(MIDI_TIME_CLOCK);
+			std::this_thread::sleep_for(microseconds(10));
+		}
 
 		while (isThreadRunning() && isPlaying) {
 			auto now = clock::now();
@@ -104,19 +120,20 @@ protected:
 					}
 				}
 
-				// Schedule next pulse precisely
-				nextPulseTime += microseconds(microsPerPulse);
+				// High precision timing adjustment
+				nextPulseTime += pulseInterval;
 
-				// Reset schedule if we're too far behind
-				if (now > nextPulseTime + microseconds(microsPerPulse * 2)) {
-					nextPulseTime = now;
+				// Prevent drift accumulation
+				auto currentDrift = duration_cast<microseconds>(now - nextPulseTime).count();
+				if (std::abs(currentDrift) > microsPerPulse) {
+					nextPulseTime = now + pulseInterval;
 				}
 			}
 
-			// More precise sleep calculation
+			// Optimized sleep calculation
 			auto timeToNext = duration_cast<microseconds>(nextPulseTime - clock::now());
-			if (timeToNext > microseconds(0)) {
-				std::this_thread::sleep_for(timeToNext / 2);
+			if (timeToNext > minSleepTime) {
+				std::this_thread::sleep_for(timeToNext - minSleepTime);
 			}
 		}
 	}
