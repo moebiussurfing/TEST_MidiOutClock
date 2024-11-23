@@ -12,24 +12,6 @@ public:
 		setBpm(120.0f); // Initialize default tempo
 	}
 
-	float getBpm() {
-		std::lock_guard<std::mutex> lock(mutex);
-		return bpm;
-	}
-
-	void toggleClock() {
-		if (isClockRunning()) {
-			stop();
-		}
-		else {
-			play();
-		}
-	}
-
-	bool isClockRunning() const {
-		return isPlaying && isThreadRunning();
-	}
-
 	void setBpm(float newBpm) {
 		std::lock_guard<std::mutex> lock(mutex);
 		bpm = std::clamp(newBpm, 20.0f, 300.0f);
@@ -40,6 +22,11 @@ public:
 		ofLogNotice() << "Clock settings:"
 			<< " BPM: " << bpm
 			<< " Micros per pulse: " << microsPerPulse;
+	}
+
+	float getBpm() {
+		std::lock_guard<std::mutex> lock(mutex);
+		return bpm;
 	}
 
 	void play() {
@@ -79,6 +66,19 @@ public:
 
 		waitForThread(true);
 		ofLogNotice() << "MIDI Clock stopped";
+	}
+
+	void toggleClock() {
+		if (isClockRunning()) {
+			stop();
+		}
+		else {
+			play();
+		}
+	}
+
+	bool isClockRunning() const {
+		return isPlaying && isThreadRunning();
 	}
 
 protected:

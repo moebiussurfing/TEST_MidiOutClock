@@ -22,31 +22,26 @@ void ofApp::setup() {
 void ofApp::update() {
 }
 
-void ofApp::exit() {
-	clockThread.stop();
-	midiOut.closePort();
-}
-
 void ofApp::draw() {
 	ofSetColor(0);
 	stringstream text;
-	text << "CONNECTED TO PORT " << midiOut.getPort()<<endl
-		<< " \"" << midiOut.getName() << "\"" << endl
-		<< "is virtual?: " << midiOut.isVirtual() << endl << endl
-		<< "Sending to channel " << channel << endl << endl
+	text << "CONNECTED PORT " << midiOut.getPort()<<endl
+		<< " \"" << midiOut.getName() << "\"" << endl<< endl
+		//<< "is virtual?: " << midiOut.isVirtual() << endl << endl
+		//<< "Sending to channel " << channel << endl << endl
 		<< "TEST mousePress x" << endl
 		<< "note: " << note << endl
-		<< "velocity: " << velocity << endl
-		<< "\n\nMIDI OUT CLOCK: " << (clockThread.isClockRunning() ? "on" : "off") << endl  
+		<< "velocity: " << velocity << endl<< endl<< endl
+		<< "MIDI OUT CLOCK: " << (clockThread.isClockRunning() ? "On" : "Off") << endl  
 		<< "Start/Stop: Space key" << endl
-		<< "Tempo: +/-" << endl
+		<< "Tempo: +/- keys" << endl
 		<< "mouseDrag y" << endl
-		<< "Reset: backspace" << endl
-		<< "BPM: " << ofToString(clockThread.getBpm(),1);
+		<< "Reset: backspace key" << endl<< endl
+		<< "BPM: " << ofToString(clockThread.getBpm(),2);
 	ofDrawBitmapString(text.str(), 20, 20);
 
 	if (ofGetElapsedTimeMillis() % 2000 == 0)
-		ofLogNotice() << "MIDI Clock BPM: " << clockThread.getBpm();
+		ofLogNotice() << "Midi Clock BPM: " << clockThread.getBpm();
 }
 
 void ofApp::keyPressed(int key) {
@@ -70,6 +65,7 @@ void ofApp::keyPressed(int key) {
 }
 
 void ofApp::mousePressed(int x, int y, int button) {
+	// Trigs a random noteOn + noteOff
 	int note_ = ofMap(x, 0, ofGetWidth(), 0, 127);
 	int velocity_ = ofRandom(32, 128);
 	midiOut.sendNoteOn(channel, note_, velocity_);
@@ -82,6 +78,12 @@ void ofApp::mousePressed(int x, int y, int button) {
 }
 
 void ofApp::mouseDragged(int x, int y, int button) {
-	float v = ofMap(x, 0, ofGetHeight(), 240, 60);
+	// Set bpm
+	float v = ofMap(x, 0, ofGetHeight(), 400, 10);
 	clockThread.setBpm(v);
+}
+
+void ofApp::exit() {
+	clockThread.stop();
+	midiOut.closePort();
 }
