@@ -26,7 +26,7 @@ enc_temp_folder\*
 *\enc_temp_folder\*
 
 ## scripts
-# *.ps1
+*.ps1
 # *.bat
 
 ## settings
