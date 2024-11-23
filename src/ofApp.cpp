@@ -15,6 +15,7 @@ void ofApp::setup() {
 	note = 0;
 	velocity = 0;
 
+	clockThread.setBpm(120.0f);
 	clockThread.setup(&midiOut);
 }
 
@@ -29,26 +30,26 @@ void ofApp::exit() {
 void ofApp::draw() {
 	ofSetColor(0);
 	stringstream text;
-	text << "Connected to port " << midiOut.getPort()
+	text << "CONNECTED TO PORT " << midiOut.getPort()<<endl
 		<< " \"" << midiOut.getName() << "\"" << endl
 		<< "is virtual?: " << midiOut.isVirtual() << endl << endl
 		<< "Sending to channel " << channel << endl << endl
-		<< "MouseDrag" << endl
+		<< "MOUSEPRESS" << endl
 		<< "note: " << note << endl
 		<< "velocity: " << velocity << endl
-		<< "\n\nMidi Out Clock: " << (clockThread.isClockRunning() ? "on" : "off") << endl  // Usar isClockRunning
-		<< "c: Start/Stop" << endl
-		<< "BPM: " << clockThread.getBpm() << endl
-		<< "Tempo +/-: " << clockThread.getBpm();
+		<< "\n\nMIDI OUT CLOCK: " << (clockThread.isClockRunning() ? "on" : "off") << endl  // Usar isClockRunning
+		<< "Space keyc: Start/Stop" << endl
+		<< "Tempo +/-: " << clockThread.getBpm() << endl
+		<< "BPM: " << clockThread.getBpm();
 	ofDrawBitmapString(text.str(), 20, 20);
 
-	if (ofGetElapsedTimeMillis() % 1000 == 0)
-		ofLogNotice() << "\nMIDI Clock BPM: " << clockThread.getBpm();
+	if (ofGetElapsedTimeMillis() % 2000 == 0)
+		ofLogNotice() << "MIDI Clock BPM: " << clockThread.getBpm();
 }
 
 void ofApp::keyPressed(int key) {
 	switch (key) {
-	case 'c': // Start/Stop MIDI clock
+	case ' ': // Start/Stop MIDI clock
 		clockThread.toggleClock();  // Más simple usando toggleClock
 		break;
 
@@ -62,7 +63,7 @@ void ofApp::keyPressed(int key) {
 	}
 }
 
-void ofApp::mouseDragged(int x, int y, int button) {
+void ofApp::mousePressed(int x, int y, int button) {
 	int note_ = ofMap(x, 0, ofGetWidth(), 0, 127);
 	int velocity_ = ofRandom(32, 128);
 	midiOut.sendNoteOn(channel, note_, velocity_);

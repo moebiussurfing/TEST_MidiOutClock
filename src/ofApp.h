@@ -5,116 +5,156 @@
 
 class MidiClockThread : public ofThread {
 public:
-    MidiClockThread() : bpm(120.0f), isPlaying(false), midiOut(nullptr) {}
+	MidiClockThread() : bpm(120.0f), isPlaying(false), midiOut(nullptr), songPositionBeats(0) {}
 
-    void setup(ofxMidiOut* output) {
-        midiOut = output;
-    }
+	void setup(ofxMidiOut* output) {
+		midiOut = output;
+	}
 
-    void setBpm(float newBpm) {
-        std::lock_guard<std::mutex> lock(mutex);
-        bpm = std::clamp(newBpm, 20.0f, 300.0f);
-    }
+	float getBpm() {
+		std::lock_guard<std::mutex> lock(mutex);
+		return bpm;
+	}
 
-    float getBpm() {
-        std::lock_guard<std::mutex> lock(mutex);
-        return bpm;
-    }
+	void toggleClock() {
+		if (isClockRunning()) {
+			stop();
+		}
+		else {
+			play();
+		}
+	}
 
-    void play() {
-        if (isThreadRunning()) return;
-        isPlaying = true;
-        startThread();
-        if (midiOut) midiOut->sendMidiByte(MIDI_START);
-    }
+	bool isClockRunning() const {
+		return isPlaying && isThreadRunning();
+	}
 
-    void stop() {
-        if (!isThreadRunning()) return;
-        if (midiOut) midiOut->sendMidiByte(MIDI_STOP);
-        isPlaying = false;
-        waitForThread(true);
-    }
+	void setBpm(float newBpm) {
+		std::lock_guard<std::mutex> lock(mutex);
+		bpm = std::clamp(newBpm, 20.0f, 300.0f);
 
-    void toggleClock() {
-        if (isClockRunning()) {
-            stop();
-        }
-        else {
-            play();
-        }
-    }
+		// Recalcular valores de temporización
+		pulsesPerQuarterNote = 24; // Estándar MIDI
+		microsPerPulse = static_cast<uint64_t>((60.0 * 1000000.0) / (bpm * pulsesPerQuarterNote));
+	}
 
-    bool isClockRunning() const {
-        return isPlaying && isThreadRunning();
-    }
+	void play() {
+		if (isThreadRunning()) return;
+
+		{
+			std::lock_guard<std::mutex> lock(mutex);
+			isPlaying = true;
+			songPositionBeats = 0;
+		}
+
+		if (midiOut) {
+			// Enviar mensajes MIDI realtime en secuencia
+			midiOut->sendMidiByte(MIDI_START);
+
+			// Enviar posición de la canción (0)
+			std::vector<unsigned char> songPos = {
+				MIDI_SONG_POS_POINTER,
+				0x00,  // LSB
+				0x00   // MSB
+			};
+			midiOut->sendMidiBytes(songPos);
+		}
+
+		startThread();
+	}
+
+	void stop() {
+		if (!isThreadRunning()) return;
+
+		if (midiOut) {
+			midiOut->sendMidiByte(MIDI_STOP);
+		}
+
+		{
+			std::lock_guard<std::mutex> lock(mutex);
+			isPlaying = false;
+		}
+
+		waitForThread(true);
+	}
 
 protected:
-    void threadedFunction() override {
-        using clock = std::chrono::steady_clock;  // steady_clock is better for precise timing
-        using namespace std::chrono;
+	void threadedFunction() override {
+		using clock = std::chrono::steady_clock;
+		using namespace std::chrono;
 
-        auto start_time = clock::now();
-        uint64_t pulse_count = 0;
+		auto lastPulseTime = clock::now();
+		uint64_t pulseCount = 0;
 
-        while (isThreadRunning() && isPlaying) {
-            float current_bpm;
-            {
-                std::lock_guard<std::mutex> lock(mutex);
-                current_bpm = bpm;
-            }
+		while (isThreadRunning() && isPlaying) {
+			auto now = clock::now();
 
-            // Precise calculation of MIDI pulse interval (24 ppqn)
-            double microsPerPulse = (60.0 * 1000000.0) / (current_bpm * 24.0);
+			// Calcular tiempo desde el último pulso
+			auto elapsedMicros = duration_cast<microseconds>(now - lastPulseTime).count();
 
-            // Calculate exact next pulse time based on start_time
-            auto next_pulse_time = start_time + microseconds(static_cast<uint64_t>(microsPerPulse * pulse_count));
-            auto now = clock::now();
+			if (elapsedMicros >= microsPerPulse) {
+				if (midiOut) {
+					// Enviar pulso MIDI Clock
+					midiOut->sendMidiByte(MIDI_TIME_CLOCK);
 
-            if (now >= next_pulse_time) {
-                // Send MIDI clock
-                if (midiOut) midiOut->sendMidiByte(MIDI_TIME_CLOCK);
-                pulse_count++;
+					// Actualizar posición de la canción cada nota (24 pulsos)
+					pulseCount++;
+					if (pulseCount % 24 == 0) {
+						std::lock_guard<std::mutex> lock(mutex);
+						songPositionBeats++;
 
-                // Resync if we've fallen significantly behind
-                auto drift = duration_cast<microseconds>(now - next_pulse_time).count();
-                if (drift > microsPerPulse * 2) {
-                    start_time = now;
-                    pulse_count = 0;
-                    ofLogNotice() << "MIDI Clock: Resync triggered. Drift: " << drift << " microseconds";
-                }
-            }
-            else {
-                // Sleep until just before next pulse
-                auto sleep_duration = next_pulse_time - now;
-                if (sleep_duration > microseconds(100)) {
-                    sleep_duration = sleep_duration - microseconds(50); // Wake up slightly early for better precision
-                    std::this_thread::sleep_for(sleep_duration);
-                }
-            }
-        }
-    }
+						// Opcional: Enviar posición MIDI
+						uint16_t pos = songPositionBeats * 4; // Convertir a beats MIDI (16th notes)
+						std::vector<unsigned char> songPos = {
+							MIDI_SONG_POS_POINTER,
+							static_cast<unsigned char>(pos & 0x7F),        // LSB
+							static_cast<unsigned char>((pos >> 7) & 0x7F)  // MSB
+						};
+						midiOut->sendMidiBytes(songPos);
+					}
+				}
+
+				// Resetear para el siguiente pulso
+				lastPulseTime = now;
+
+				// Corrección de timing de alta precisión
+				auto drift = elapsedMicros - microsPerPulse;
+				if (drift > 0) {
+					lastPulseTime -= microseconds(drift);
+				}
+			}
+
+			// Pequeña pausa para prevenir sobrecarga de CPU manteniendo precisión
+			std::this_thread::sleep_for(microseconds(100));
+		}
+	}
 
 private:
-    float bpm;
-    bool isPlaying;
-    ofxMidiOut* midiOut;
+	float bpm;
+	bool isPlaying;
+	ofxMidiOut* midiOut;
+	uint32_t songPositionBeats;  // Posición en quarter notes
+	uint32_t pulsesPerQuarterNote;
+	uint64_t microsPerPulse;
 };
+
+//--
 
 class ofApp : public ofBaseApp {
 public:
-    void setup();
-    void update();
-    void draw();
-    void exit();
+	void setup();
+	void update();
+	void draw();
+	void exit();
 
-    void keyPressed(int key);
-    void mouseDragged(int x, int y, int button);
+	void keyPressed(int key);
+	void mousePressed(int x, int y, int button);
 
-    ofxMidiOut midiOut;
+	ofxMidiOut midiOut;
 
-    int channel;
-    int note, velocity;
+	int channel;
+	int note, velocity;
 
 private:
-    MidiClockThread clockThread;
+	MidiClockThread clockThread;
 };
