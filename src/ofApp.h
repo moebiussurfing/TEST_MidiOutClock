@@ -9,6 +9,7 @@ public:
 
     void setup(ofxMidiOut* output) {
         midiOut = output;
+        setBpm(120.0f); // Initialize default tempo
     }
 
     float getBpm() {
@@ -32,8 +33,6 @@ public:
     void setBpm(float newBpm) {
         std::lock_guard<std::mutex> lock(mutex);
         bpm = std::clamp(newBpm, 20.0f, 300.0f);
-
-        // Recalculate timing values
         pulsesPerQuarterNote = 24; // MIDI standard
         microsPerPulse = static_cast<uint64_t>((60.0 * 1000000.0) / (bpm * pulsesPerQuarterNote));
     }
@@ -48,16 +47,13 @@ public:
         }
 
         if (midiOut) {
-            // Send MIDI realtime messages in sequence
-            midiOut->sendMidiByte(MIDI_START);
+            // Send MIDI song position (0)
+            midiOut->sendMidiByte(MIDI_SONG_POS_POINTER);
+            midiOut->sendMidiByte(0x00); // LSB
+            midiOut->sendMidiByte(0x00); // MSB
 
-            // Send song position (0)
-            std::vector<unsigned char> songPos = {
-                MIDI_SONG_POS_POINTER,
-                0x00,  // LSB
-                0x00   // MSB
-            };
-            midiOut->sendMidiBytes(songPos);
+            // Send MIDI Start message
+            midiOut->sendMidiByte(MIDI_START);
         }
 
         startThread();
@@ -88,43 +84,30 @@ protected:
 
         while (isThreadRunning() && isPlaying) {
             auto now = clock::now();
-
-            // Calculate time since last pulse
             auto elapsedMicros = duration_cast<microseconds>(now - lastPulseTime).count();
 
             if (elapsedMicros >= microsPerPulse) {
                 if (midiOut) {
-                    // Send MIDI Clock pulse
+                    // Send MIDI Clock pulse (0xF8)
                     midiOut->sendMidiByte(MIDI_TIME_CLOCK);
 
-                    // Update song position every quarter note (24 pulses)
                     pulseCount++;
-                    if (pulseCount % 24 == 0) {
+                    if (pulseCount % pulsesPerQuarterNote == 0) {
                         std::lock_guard<std::mutex> lock(mutex);
                         songPositionBeats++;
-
-                        // Optional: Send MIDI Song Position
-                        uint16_t pos = songPositionBeats * 4; // Convert to MIDI beats (16th notes)
-                        std::vector<unsigned char> songPos = {
-                            MIDI_SONG_POS_POINTER,
-                            static_cast<unsigned char>(pos & 0x7F),        // LSB
-                            static_cast<unsigned char>((pos >> 7) & 0x7F)  // MSB
-                        };
-                        midiOut->sendMidiBytes(songPos);
                     }
                 }
 
-                // Reset for next pulse
-                lastPulseTime = now;
+                lastPulseTime += microseconds(microsPerPulse);
 
-                // High precision timing correction
-                auto drift = elapsedMicros - microsPerPulse;
+                // Calculate drift and adjust timing
+                auto drift = duration_cast<microseconds>(now - lastPulseTime).count();
                 if (drift > 0) {
-                    lastPulseTime -= microseconds(drift);
+                    lastPulseTime += microseconds(drift);
                 }
             }
 
-            // Small sleep to prevent CPU overload while maintaining precision
+            // Yield thread for a short time to prevent CPU overload
             std::this_thread::sleep_for(microseconds(100));
         }
     }
@@ -133,7 +116,7 @@ private:
     float bpm;
     bool isPlaying;
     ofxMidiOut* midiOut;
-    uint32_t songPositionBeats;  // Position in quarter notes
+    uint32_t songPositionBeats;
     uint32_t pulsesPerQuarterNote;
     uint64_t microsPerPulse;
 };

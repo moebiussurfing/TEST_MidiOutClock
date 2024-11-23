@@ -37,7 +37,7 @@ void ofApp::draw() {
 		<< "MOUSEPRESS" << endl
 		<< "note: " << note << endl
 		<< "velocity: " << velocity << endl
-		<< "\n\nMIDI OUT CLOCK: " << (clockThread.isClockRunning() ? "on" : "off") << endl  // Usar isClockRunning
+		<< "\n\nMIDI OUT CLOCK: " << (clockThread.isClockRunning() ? "on" : "off") << endl  
 		<< "Space keyc: Start/Stop" << endl
 		<< "Tempo +/-: " << clockThread.getBpm() << endl
 		<< "BPM: " << clockThread.getBpm();
@@ -50,7 +50,7 @@ void ofApp::draw() {
 void ofApp::keyPressed(int key) {
 	switch (key) {
 	case ' ': // Start/Stop MIDI clock
-		clockThread.toggleClock();  // Más simple usando toggleClock
+		clockThread.toggleClock();
 		break;
 
 	case '+': // Increase tempo
