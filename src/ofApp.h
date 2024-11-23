@@ -16,11 +16,15 @@ public:
 		std::lock_guard<std::mutex> lock(mutex);
 		bpm = std::clamp(newBpm, 20.0f, 300.0f);
 		pulsesPerQuarterNote = 24; // MIDI standard
-		microsPerPulse = static_cast<uint64_t>((60.0 * 1000000.0) / (bpm * pulsesPerQuarterNote));
 
-		// Log timing details
+		// Use double for higher precision in calculation
+		double microsecondsPerMinute = 60.0 * 1000000.0;
+		double pulsesPerMinute = bpm * pulsesPerQuarterNote;
+		microsPerPulse = static_cast<uint64_t>(microsecondsPerMinute / pulsesPerMinute);
+
 		ofLogNotice() << "Clock settings:"
 			<< " BPM: " << bpm
+			<< " PPQN: " << pulsesPerQuarterNote
 			<< " Micros per pulse: " << microsPerPulse;
 	}
 
@@ -86,6 +90,7 @@ protected:
 		using clock = std::chrono::steady_clock;
 		using namespace std::chrono;
 
+		const microseconds minSleepTime(100); // Minimum practical sleep time
 		auto nextPulseTime = clock::now();
 		uint64_t pulseCount = 0;
 
@@ -94,30 +99,37 @@ protected:
 
 			if (now >= nextPulseTime) {
 				if (midiOut) {
-					// Send MIDI Clock pulse (0xF8)
+					// Send MIDI Clock pulse precisely and atomically 
+					std::lock_guard<std::mutex> lock(mutex);
 					midiOut->sendMidiByte(MIDI_TIME_CLOCK);
 
 					pulseCount++;
 					if (pulseCount % pulsesPerQuarterNote == 0) {
-						std::lock_guard<std::mutex> lock(mutex);
 						songPositionBeats++;
 					}
 				}
 
-				// Schedule next pulse precisely
+				// Calculate next pulse time
 				nextPulseTime += microseconds(microsPerPulse);
 
-				// Reset schedule if we're too far behind
-				if (now > nextPulseTime + microseconds(microsPerPulse * 2)) {
-					nextPulseTime = now;
+				// Reset schedule if significantly behind
+				if (now > nextPulseTime + microseconds(microsPerPulse * 4)) {
+					ofLogWarning() << "MIDI Clock drift detected, resetting schedule";
+					nextPulseTime = now + microseconds(microsPerPulse);
 				}
 			}
 
-			// More precise sleep calculation
+			// More precise sleep timing using spin-wait for fine-grained timing
 			auto timeToNext = duration_cast<microseconds>(nextPulseTime - clock::now());
-			if (timeToNext > microseconds(0)) {
-				std::this_thread::sleep_for(timeToNext / 2);
+			if (timeToNext > minSleepTime) {
+				std::this_thread::sleep_for(timeToNext - minSleepTime);
 			}
+
+			// Spin-wait for the remaining time
+			while (clock::now() < nextPulseTime) {
+				std::this_thread::yield();
+			}
+
 		}
 	}
 
@@ -152,11 +164,12 @@ private:
 	MidiClockThread clockThread;
 };
 
-//--
+//----
 
 /*
 
 Test with a MIDI monitor (like MIDI Monitor on macOS or Protokol) to verify the messages:
+
 
 You should see F8 messages being sent regularly (24 per quarter note)
 When starting: F2 00 00 followed by FA
@@ -169,5 +182,26 @@ Set the correct MIDI port as "Input"
 Enable "Track" and "Sync" for that input port
 
 This implementation should now work correctly with Ableton Live and other DAWs that accept MIDI clock sync.
+
+*/
+
+/*
+
+Consider using high-resolution timer features on your specific OS for better precision:
+
+
+Windows: timeBeginPeriod(1)
+Linux: SCHED_FIFO scheduling
+macOS: mach_absolute_time()
+
+These changes should provide more stable timing and help reduce drift between master/slave applications. The statistics tracking will also help you monitor the actual vs target BPM.
+
+*/
+
+/*
+
+Additional recommendations:
+
+Consider buffering MIDI messages and sending them in batches to reduce system calls
 
 */
