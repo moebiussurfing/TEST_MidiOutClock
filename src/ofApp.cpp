@@ -34,12 +34,13 @@ void ofApp::draw() {
 		<< " \"" << midiOut.getName() << "\"" << endl
 		<< "is virtual?: " << midiOut.isVirtual() << endl << endl
 		<< "Sending to channel " << channel << endl << endl
-		<< "MOUSEPRESS Test" << endl
+		<< "TEST mousePress x" << endl
 		<< "note: " << note << endl
 		<< "velocity: " << velocity << endl
 		<< "\n\nMIDI OUT CLOCK: " << (clockThread.isClockRunning() ? "on" : "off") << endl  
 		<< "Space key: Start/Stop" << endl
 		<< "Tempo +/-: " << clockThread.getBpm() << endl
+		<< "mouseDrag y" << endl
 		<< "Reset backspace" << endl
 		<< "BPM: " << clockThread.getBpm();
 	ofDrawBitmapString(text.str(), 20, 20);
@@ -78,4 +79,9 @@ void ofApp::mousePressed(int x, int y, int button) {
 
 	velocity_ = 0;
 	midiOut << NoteOff(channel, note_, velocity_);
+}
+
+void ofApp::mouseDragged(int x, int y, int button) {
+	int v = ofMap(x, 0, ofGetHeight(), 240, 60);
+	clockThread.setBpm(v);
 }
