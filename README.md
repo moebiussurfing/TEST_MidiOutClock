@@ -7,5 +7,8 @@ Tested on **Windows 11** and **macOS M1** / **OF 0.12.0**.
 
 Platform agnostic using C++ timers.
 
-**TODO**
+## TODO
 - MIDI slave app requires ~10 seconds to pair target BPM.
+
+### Related to 
+https://github.com/danomatika/ofxMidi/issues/89
